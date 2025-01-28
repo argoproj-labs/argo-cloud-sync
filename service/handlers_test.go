@@ -595,6 +595,7 @@ func TestDeleteTarget(t *testing.T) {
 			method:     "DELETE",
 			cpMock: &th.CredsProviderMock{
 				DeleteTargetFunc: func(s1, s2 string) error { return nil },
+				TargetExistsFunc: func(s1, s2 string) (bool, error) { return true, nil },
 			},
 		},
 		{
@@ -605,6 +606,28 @@ func TestDeleteTarget(t *testing.T) {
 			method:     "DELETE",
 			cpMock: &th.CredsProviderMock{
 				DeleteTargetFunc: func(s1, s2 string) error { return errors.New("error") },
+				TargetExistsFunc: func(s1, s2 string) (bool, error) { return true, nil },
+			},
+		},
+		{
+			name:       "error retrieving target",
+			want:       http.StatusInternalServerError,
+			authHeader: adminAuthHeader,
+			url:        "/projects/projectalreadyexists/targets/errorretrivingtarget",
+			method:     "DELETE",
+			cpMock: &th.CredsProviderMock{
+				TargetExistsFunc: func(s1 string, s2 string) (bool, error) { return false, errors.New("error") },
+			},
+		},
+		{
+			name:       "target does not exist",
+			want:       http.StatusNotFound,
+			authHeader: adminAuthHeader,
+			url:        "/projects/projectalreadyexists/targets/targetdoesnotexist",
+			method:     "DELETE",
+			cpMock: &th.CredsProviderMock{
+				DeleteTargetFunc: func(s1, s2 string) error { return errors.New("error") },
+				TargetExistsFunc: func(s1 string, s2 string) (bool, error) { return false, nil },
 			},
 		},
 	}

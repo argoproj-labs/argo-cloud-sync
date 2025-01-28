@@ -864,6 +864,19 @@ func (h handler) deleteTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	targetExists, err := cp.TargetExists(projectName, targetName)
+	if err != nil {
+		level.Error(l).Log("message", "error retrieving target", "error", err)
+		h.errorResponse(w, "error retrieving target", http.StatusInternalServerError)
+		return
+	}
+
+	if !targetExists {
+		level.Error(l).Log("message", "target does not exist")
+		h.errorResponse(w, "target does not exist", http.StatusNotFound)
+		return
+	}
+
 	level.Debug(l).Log("message", "deleting target")
 	err = cp.DeleteTarget(projectName, targetName)
 	if err != nil {
