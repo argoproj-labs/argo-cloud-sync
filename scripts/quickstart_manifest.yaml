@@ -667,7 +667,20 @@ spec:
    app: postgres
 
 # CELLO
-
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cello-service
+  labels:
+    app: cello
+spec:
+  type: NodePort
+  ports:
+    - port: 8443
+      targetPort: 8443
+  selector:
+   app: cello
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -690,14 +703,20 @@ spec:
           persistentVolumeClaim:
             claimName: 'vault-pv-claim'
       containers:
-      - image: cello:latest
+      - image: docker.intuit.com/personal/sfruhwald/cello:latest
         name: cello
-        imagePullPolicy: Never
+        imagePullPolicy: Always
         command:
         - "/bin/sh"
         - "-ec"
         args: 
         - |
+          # erase database tables on each startup
+          export PGPASSWORD=1234
+          echo "SELECT 'TRUNCATE ' || input_table_name || ' CASCADE;' AS truncate_query FROM(SELECT table_schema || '.' || table_name AS input_table_name FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema') AND table_schema NOT LIKE 'pg_toast%') AS information;" > /tmp/erase-cello-db.sql
+          psql -h $POSTGRES_SERVICE_HOST -p $POSTGRES_SERVICE_PORT --set=sslmode=disabled -U cello -f /tmp/erase-cello-db.sql
+
+          # wait for vault secret
           until [ -f /home/vault/secretid.txt ]
           do
             echo "Waiting for secret data to be written"
@@ -739,6 +758,9 @@ spec:
             value: DEBUG
           - name: CELLO_LOG_LEVEL
             value: DEBUG
+        envFrom:
+        - secretRef:
+            name: github-token
         volumeMounts:
           - name: vault-home
             mountPath: /home/vault

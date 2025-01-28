@@ -18,6 +18,11 @@ function executable_check()  {
   fi
 }
 
+# use this function by a trap on SIGINT (CTRL+C) to kill all background processes
+function kill_jobs {
+  jobs -p | xargs -i  sh -c 'kill {} 2>/dev/null'
+}
+
 executable_check "brew" '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
 executable_check "docker" 'brew cask install docker'
 executable_check "kubectl" 'curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/darwin/amd64/kubectl"'
@@ -90,10 +95,6 @@ fi
 echo "Applying manifest"
 kubectl apply -f ./scripts/quickstart_manifest.yaml
 # Sleeping after applying manifest so pods have time to start
-while [ "$(kubectl get pods -l=app='cello' -o jsonpath='{.items[*].status.containerStatuses[0].ready}')" != "true" ]; do
-   sleep 5
-   echo "Waiting for Cello to be ready."
-done
 while [ "$(kubectl get pods -l=app.kubernetes.io/name='vault' -o jsonpath='{.items[*].status.containerStatuses[0].ready}')" != "true" ]; do
    sleep 5
    echo "Waiting for Vault to be ready."
@@ -109,6 +110,14 @@ set -e
 # don't fail if already exists
 set +e
 export POSTGRES_POD="$(kubectl get pods --no-headers -o custom-columns=":metadata.name" | grep postgres)"
+
+RETRIES=20
+until kubectl exec $POSTGRES_POD -- psql -d postgres -c "select 1" > /dev/null 2>&1 || [ $RETRIES -eq 0 ]; do
+  echo "Waiting for postgres server to fully start up, $((RETRIES--)) remaining attempts..."
+  sleep 3
+done
+
+# Check if db exists, create if not
 kubectl exec $POSTGRES_POD -- psql -lqt | cut -d \| -f 1 | grep cello
 if [ $? != 0 ]; then
   kubectl exec $POSTGRES_POD -- createdb cello -U postgres
@@ -133,6 +142,11 @@ while : ; do
     echo "ERROR: migration job failed. Please check pod logs and ."
     exit 1
   fi
+done
+
+while [ "$(kubectl get pods -l=app='cello' -o jsonpath='{.items[*].status.containerStatuses[0].ready}')" != "true" ]; do
+   sleep 5
+   echo "Waiting for Cello to be ready."
 done
 
 # setup workflow if it doesn't exist
@@ -193,6 +207,14 @@ EOF
 kubectl exec vault-0 -- mkdir -p /home/vault/.aws
 kubectl cp /tmp/awsConfig vault-0:/home/vault/.aws/credentials
 
-echo "Cello started, forwarding to port 8443"
-export CELLO_POD="$(kubectl get pods --field-selector status.phase=Running --no-headers -o custom-columns=":metadata.name" | grep cello)"
-kubectl port-forward $CELLO_POD 8443:8443
+# Trap to wait until user hits Ctrl-C, then kill child processes.
+trap kill_jobs SIGINT
+
+# Argo Workflows UI
+echo "Exposing Argo UI & API on http://localhost:2746/"
+argo server --secure=false --auth-mode=server >/dev/null 2>&1 &
+
+CELLO_LOCAL_PORT=8443
+echo "Cello started, forwarding to port $CELLO_LOCAL_PORT"
+kubectl port-forward service/cello-service $CELLO_LOCAL_PORT:8443 &
+wait

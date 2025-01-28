@@ -6,8 +6,12 @@
 version: "0.0.1"
 commands:
   cdk:
-    diff: "{{.EnvironmentVariables}} cdk bootstrap && {{.EnvironmentVariables}} cdk diff {{.ExecuteArguments}}"
-    sync: "{{.EnvironmentVariables}} cdk bootstrap && {{.EnvironmentVariables}} cdk deploy {{.ExecuteArguments}}"
+    bootstrap: "{{.EnvironmentVariables}} npx cdk --version && {{.EnvironmentVariables}} npx cdk bootstrap {{.ExecuteArguments}}"
+    destroy: "{{.EnvironmentVariables}} npx cdk destroy {{.ExecuteArguments}}"
+    diff: "{{.EnvironmentVariables}} npx cdk diff {{.ExecuteArguments}}"
+    sync: "{{.EnvironmentVariables}} npx cdk synth --all -q && {{.EnvironmentVariables}} npx cdk deploy {{.ExecuteArguments}}"
   terraform:
-    diff: "{{.EnvironmentVariables}} terraform init {{.InitArguments}} && {{.EnvironmentVariables}} terraform plan {{.ExecuteArguments}}"
-    sync: "{{.EnvironmentVariables}} terraform init {{.InitArguments}} && {{.EnvironmentVariables}} terraform apply {{.ExecuteArguments}}"
+    bootstrap: "{{.EnvironmentVariables}} bootstrap-terraform.sh"
+    destroy: "{{.EnvironmentVariables}} run-terraform.sh -c destroy -a '{{.ExecuteArguments}}'"
+    diff: "{{.EnvironmentVariables}} run-terraform.sh -c plan -a '{{.ExecuteArguments}}'"
+    sync: "{{.EnvironmentVariables}} run-terraform.sh -c apply -a '{{.ExecuteArguments}}'"
